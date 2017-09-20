@@ -1,4 +1,4 @@
-// botvs@3a9b380335ff999fbfae11172834a332
+// botvs@1f1070cf371b2a931eea35e062f684fb
 var initState;
 var isBalance = true;
 var feeCache = new Array();
@@ -7,11 +7,6 @@ var lastProfit = 0;                       // 全局变量 记录上次盈亏
 var lastAvgPrice = 0;
 var lastSpread = 0;
 var lastOpAmount = 0;
-var minTradeAmount = 0.1;
-
-var balanceTried = 0;
-var maxBalanceRetryTimes = 4;
-
 function adjustFloat(v) {                 // 处理数据的自定义函数 ，可以把参数 v 处理 返回 保留3位小数（floor向下取整）
     return Math.floor(v*1000)/1000;       // 先乘1000 让小数位向左移动三位，向下取整 整数，舍去所有小数部分，再除以1000 ， 小数点向右移动三位，即保留三位小数。
 }
@@ -102,31 +97,6 @@ function cancelAllOrders() {                                        // 取消所
     }
 }
 
-function logStateDetails(state) {
-    for(var i in state.details) {
-        var exchange = state.details[i].exchange;
-        var account = state.details[i].account;
-        Log(exchange.GetName() + ", Stocks: " + account.Stocks + ", Balance: " + account.Balance);
-    }
-}
-
-function setBalanced() {
-    isBalance = true;
-    balanceTried = 0;
-}
-
-function isBalanceRetryTooMuch() {
-    if(balanceTried >= maxBalanceRetryTimes) {
-        setBalanced();         //放弃重试，设置已平衡
-        return true;
-    }
-    return false;
-}
-
-function didBalance(){
-    balanceTried++;
-}
-
 function balanceAccounts() {          // 平衡交易所 账户 钱数 币数
     // already balance
     if (isBalance) {                  // 如果 isBalance 为真 ， 即 平衡状态，则无需平衡，立即返回
@@ -139,17 +109,9 @@ function balanceAccounts() {          // 平衡交易所 账户 钱数 币数
     var diff = state.allStocks - initState.allStocks;      // 计算当前获取的交易所状态中的 总币数与初始状态总币数 只差（即 初始状态 和 当前的 总币差）
     var adjustDiff = adjustFloat(Math.abs(diff));          // 先调用 Math.abs 计算 diff 的绝对值，再调用自定义函数 adjustFloat 保留3位小数。 
     if (adjustDiff < state.minStock) {                     // 如果 处理后的 总币差数据 小于 满足所有交易所最小交易量的数据 minStock，即不满足平衡条件
-        // isBalance = true;                                  // 设置 isBalance 为 true ,即平衡状态
-        setBalanced();
+        isBalance = true;                                  // 设置 isBalance 为 true ,即平衡状态
     } else {                                               //  adjustDiff >= state.minStock  的情况 则：
         Log('初始币总数量:', initState.allStocks, '现在币总数量: ', state.allStocks, '差额:', adjustDiff);
-
-        if(isBalanceRetryTooMuch()) {
-            Log("重试平衡已达到最大次数，将暂时停止平衡，继续对冲。");
-            return;
-        }
-
-        // logStateDetails(state);
         // 输出要平衡的信息。
         // other ways, diff is 0.012, bug A only has 0.006 B only has 0.006, all less then minstock
         // we try to statistical orders count to recognition this situation
@@ -173,9 +135,6 @@ function balanceAccounts() {          // 平衡交易所 账户 钱数 币数
                     if ((orderPrice * orderAmount) < details[i].exchange.GetMinPrice()) {    // 判断 当前索引的交易所的最小交易额度 是否 足够本次下单的 金额。
                         continue;                                                            // 如果小于 则 跳过 执行下一个索引。
                     }
-                    if (orderAmount < minTradeAmount) {
-                        continue;
-                    }
                     ordersCount++;                                                           // 订单数量 计数 加1
                     if (details[i].exchange.Sell(orderPrice, orderAmount, stripTicker(details[i].ticker))) {   // 按照 以上程序既定的 价格 和 交易量 下单, 并且输出 排除手续费因素后处理过的行情数据。
                         adjustDiff = adjustFloat(adjustDiff - orderAmount);                  // 如果 下单API 返回订单ID ， 根据本次既定下单量更新 未平衡的量
@@ -197,12 +156,8 @@ function balanceAccounts() {          // 平衡交易所 账户 钱数 币数
                     var needRealBuy = Math.min(AmountOnce, adjustDiff, canRealBuy);
                     var orderAmount = adjustFloat(needRealBuy * (1+(details[i].fee.Buy/100)));  // 因为买入扣除的手续费 是 币数，所以 要把手续费计算在内。
                     var orderPrice = details[i].realTicker[attr] + SlidePrice;
-                    // Log(details[i].exchange.GetName() + ", canRealBuy: " + canRealBuy + ", needRealBuy: " + needRealBuy + ", details[i].fee.Buy: " + details[i].fee.Buy + ", orderAmount: " + orderAmount + ", details[i].realTicker: " + details[i].realTicker[attr] + ", orderPrice: " + orderPrice + "details[i].exchange.GetMinStock(): " + details[i].exchange.GetMinStock() + ", details[i].exchange.GetMinPrice(): " + details[i].exchange.GetMinPrice());
                     if ((orderAmount < details[i].exchange.GetMinStock()) ||
                         ((orderPrice * orderAmount) < details[i].exchange.GetMinPrice())) {
-                        continue;
-                    }
-                    if (orderAmount < minTradeAmount) {
                         continue;
                     }
                     ordersCount++;
@@ -214,12 +169,7 @@ function balanceAccounts() {          // 平衡交易所 账户 钱数 币数
                 }
             }
         }
-        // isBalance = (ordersCount == 0);                                                         // 是否 平衡， ordersCount  为 0 则 ，true
-        if(ordersCount == 0) {
-            setBalanced();
-        }else {
-            didBalance();        //记录已进行过平衡操作（Buy或Sell）
-        }
+        isBalance = (ordersCount == 0);                                                         // 是否 平衡， ordersCount  为 0 则 ，true
     }
 
     if (isBalance) {
@@ -238,6 +188,7 @@ function balanceAccounts() {          // 平衡交易所 账户 钱数 币数
         lastProfit = currentProfit;                                                             // 用当前盈亏数值 更新 上次盈亏记录
     }
 }
+
 
 function onTick() {                  // 主要循环
     if (!isBalance) {                // 判断 全局变量 isBalance 是否为 false  (代表不平衡)， !isBalance 为 真，执行 if 语句内代码。
@@ -278,22 +229,21 @@ function onTick() {                  // 主要循环
     // Log("maxPair.ticker.Buy: " + maxPair.ticker.Buy + ", maxPair.ticker.Sell: " + maxPair.ticker.Sell);
     // Log("minPair.ticker.Buy: " + minPair.ticker.Buy + ", minPair.ticker.Sell: " + minPair.ticker.Sell);
 
-    
+    // what a fuck...
+    if (maxPair.exchange.GetName() == minPair.exchange.GetName()) {                                   // 数据异常，同时 最低 最高都是一个交易所。
+        Log("不满足对冲条件：最大最小为同一市场");
+        return;
+    }
+
     if ((!maxPair) || (!minPair) || ((maxPair.ticker.Buy - minPair.ticker.Sell) < MaxDiff) ||         // 根据以上 对比出的所有交易所中最小、最大价格，检测是否不符合对冲条件
     !isPriceNormal(maxPair.ticker.Buy) || !isPriceNormal(minPair.ticker.Sell)) {
-        // Log("不满足对冲条件：对冲价格偏差小于MaxDiff (" + MaxDiff + "), 差值: " + (maxPair.ticker.Buy - minPair.ticker.Sell));
+        Log("不满足对冲条件：对冲价格偏差大于MaxDiff (" + MaxDiff + "), 差值: " + (maxPair.ticker.Buy - minPair.ticker.Sell));
         return;                                                                                       // 如果不符合 则返回
     }
 
     // filter invalid price
     if (minPair.realTicker.Sell <= minPair.realTicker.Buy || maxPair.realTicker.Sell <= maxPair.realTicker.Buy) {   // 过滤 无效价格， 比如 卖一价 是不可能小于等于 买一价的。
-        // Log("不满足对冲条件：市场价格异常");
-        return;
-    }
-
-    // what a fuck...
-    if (maxPair.exchange.GetName() == minPair.exchange.GetName()) {                                   // 数据异常，同时 最低 最高都是一个交易所。
-        // Log("不满足对冲条件：最大最小为同一市场");
+        Log("不满足对冲条件：市场价格异常");
         return;
     }
 
@@ -307,16 +257,17 @@ function onTick() {                  // 主要循环
     // Log('买进：', minPair.exchange.GetName() + '(可买进数量：' + minPair.realBuy + ' )' + '，卖出：', maxPair.exchange.GetName() + '(可卖出数量：' + maxPair.canSell + ' )');
     // Log("对冲数量：" + hedgePrice);
     // Log(minPair.exchange.GetName() + '：实际买进数量：' + (minPair.realTicker.Sell + hedgePrice) + ', ' + maxPair.exchange.GetName() + '实际卖出数量：' + (maxPair.realTicker.Buy - hedgePrice));    
-    if (minPair.exchange.Buy(minPair.realTicker.Sell + hedgePrice, amount * (1+(minPair.fee.Buy/100)), stripTicker(minPair.realTicker))) { // 先下 买单
-        maxPair.exchange.Sell(maxPair.realTicker.Buy - hedgePrice, amount, stripTicker(maxPair.realTicker));                               // 买单下之后 下卖单
-    }
+    
+    // if (minPair.exchange.Buy(minPair.realTicker.Sell + hedgePrice, amount * (1+(minPair.fee.Buy/100)), stripTicker(minPair.realTicker))) { // 先下 买单
+    //     maxPair.exchange.Sell(maxPair.realTicker.Buy - hedgePrice, amount, stripTicker(maxPair.realTicker));                               // 买单下之后 下卖单
+    // }
 
-    isBalance = false;                                                                                // 设置为 不平衡，下次带检查 平衡。
+    // isBalance = false;                                                                                // 设置为 不平衡，下次带检查 平衡。
 }
 
 function main() {                                         // 策略的入口函数
-    // LogReset();
-    // LogProfitReset();
+    LogReset();
+    LogProfitReset();
     if (exchanges.length < 2) {                           // 首先判断 exchanges 策略添加的交易所对象个数，  exchanges 是一个交易所对象数组，我们判断其长度 exchanges.length，如果小于2执行{}内代码
         throw "交易所数量最少得两个才能完成对冲";              // 抛出一个错误，程序停止。
     }
@@ -327,12 +278,12 @@ function main() {                                         // 策略的入口函�
     cancelAllOrders();                                    // 在最开始的时候 不能有任何挂单。所以 会检测所有挂单 ，并取消所有挂单。
 
     initState = getExchangesState();                      // 调用自定义的 getExchangesState 函数获取到 所有交易所的信息， 赋值给 initState 
-    if (initState.allStocks == 0) {                       // 如果 所有交易所 币数总和为0  ，抛出错误。
-        throw "所有交易所货币数量总和为空, 必须先在任一交易所建仓才可以完成对冲";
-    }
-    if (initState.allBalance == 0) {                      // 如果 所有交易所 钱数总和为0  ，抛出错误。
-        throw "所有交易所CNY数量总和为空, 无法继续对冲";
-    }
+    // if (initState.allStocks == 0) {                       // 如果 所有交易所 币数总和为0  ，抛出错误。
+    //     throw "所有交易所货币数量总和为空, 必须先在任一交易所建仓才可以完成对冲";
+    // }
+    // if (initState.allBalance == 0) {                      // 如果 所有交易所 钱数总和为0  ，抛出错误。
+    //     throw "所有交易所CNY数量总和为空, 无法继续对冲";
+    // }
 
     for (var i = 0; i < initState.details.length; i++) {  // 遍历获取的交易所状态中的 details数组。
         var e = initState.details[i];                     // 把当前索引的交易所信息赋值给e 
