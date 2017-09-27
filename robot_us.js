@@ -1,5 +1,7 @@
-// botvs@3a9b380335ff999fbfae11172834a332
+// botvs@b73a4e940c1c25c49b71b1deb4d1caa7 (local)
+
 var initState;
+var state;
 var isBalance = true;
 var feeCache = new Array();
 var feeTimeout = optFeeTimeout * 60000;
@@ -11,6 +13,8 @@ var minTradeAmount = 0.1;
 
 var balanceTried = 0;
 var maxBalanceRetryTimes = 4;
+var tradedExchanges = [];
+
 
 function adjustFloat(v) {                 // 处理数据的自定义函数 ，可以把参数 v 处理 返回 保留3位小数（floor向下取整）
     return Math.floor(v*1000)/1000;       // 先乘1000 让小数位向左移动三位，向下取整 整数，舍去所有小数部分，再除以1000 ， 小数点向右移动三位，即保留三位小数。
@@ -24,50 +28,17 @@ function stripTicker(t) {                           // 根据参数 t ， 格式
     return 'Buy: ' + adjustFloat(t.Buy) + ' Sell: ' + adjustFloat(t.Sell);
 }
 
-function updateStatePrice_new(state) {        // 更新 价格
-    var now = (new Date()).getTime();     // 记录 当前时间戳
+function updateStatePrice(state) {        // 更新 价格
+    // var now = (new Date()).getTime();     // 记录 当前时间戳
+    var tickers = getExchangeTickers();
     for (var i = 0; i < state.details.length; i++) {    // 根据传入的参数 state（getExchangesState 函数的返回值），遍历 state.details
-        // var ticker = null;                              // 声明一个 变量 ticker
+        var ticker = tickers[i];                              // 声明一个 变量 ticker
         var key = state.details[i].exchange.GetName() + state.details[i].exchange.GetCurrency();  // 获取当前索引 i  的 元素，使用其中引用的交易所对象 exchange ,调用GetName、GetCurrency函数
                                                                                                   // 交易所名称 + 币种 字符串 赋值给 key ，作为键
-        var fee = null;                                                                           // 声明一个变量 Fee
+        // var fee = null;                                                                           // 声明一个变量 Fee
         // while (!(ticker = state.details[i].exchange.GetTicker())) {                               // 用当前 交易所对象 调用 GetTicker 函数获取 行情，获取失败，执行循环
         //     Sleep(Interval);                                                                      // 执行 Sleep 函数，暂停 Interval 设置的毫秒数
         // }
-
-        var ticker = state.tickers[i];
-
-        if (key in feeCache) {                                                                    // 在feeCache 中查询，如果找到 key
-            var v = feeCache[key];                                                                // 取出 键名为 key 的变量值
-            if ((now - v.time) > feeTimeout) {                                                    // 根据行情的记录时间 和 now 的差值，如果大于 手续费更新周期
-                delete feeCache[key];                                                             // 删除 过期的 费率 数据
-            } else {
-                fee = v.fee;                                                                      // 如果没大于更新周期， 取出v.fee 赋值给 fee
-            }
-        }
-        if (!fee) {                                                                               // 如果没有找到 fee 还是初始的null ， 则触发if 
-            while (!(fee = state.details[i].exchange.GetFee())) {                                 // 调用 当前交易所对象 GetFee 函数 获取 费率
-                Sleep(Interval);
-            }
-            feeCache[key] = {fee: fee, time: now};                                                // 在费率缓存 数据结构 feeCache 中储存 获取的 fee 和 当前的时间戳
-        }
-        // Buy-=fee Sell+=fee
-        state.details[i].ticker = {Buy: ticker.Buy * (1-(fee.Sell/100)), Sell: ticker.Sell * (1+(fee.Buy/100))};   // 通过对行情价格处理 得到排除手续费后的 价格用于计算差价
-        state.details[i].realTicker = ticker;                                                                      // 实际的 行情价格
-        state.details[i].fee = fee;                                                                                // 费率
-    }
-}
-
-function updateStatePrice(state) {        // 更新 价格
-    // var now = (new Date()).getTime();     // 记录 当前时间戳
-    for (var i = 0; i < state.details.length; i++) {    // 根据传入的参数 state（getExchangesState 函数的返回值），遍历 state.details
-        var ticker = null;                              // 声明一个 变量 ticker
-        var key = state.details[i].exchange.GetName() + state.details[i].exchange.GetCurrency();  // 获取当前索引 i  的 元素，使用其中引用的交易所对象 exchange ,调用GetName、GetCurrency函数
-                                                                                                  // 交易所名称 + 币种 字符串 赋值给 key ，作为键
-        var fee = null;                                                                           // 声明一个变量 Fee
-        while (!(ticker = state.details[i].exchange.GetTicker())) {                               // 用当前 交易所对象 调用 GetTicker 函数获取 行情，获取失败，执行循环
-            Sleep(Interval);                                                                      // 执行 Sleep 函数，暂停 Interval 设置的毫秒数
-        }
 
         // if (key in feeCache) {                                                                    // 在feeCache 中查询，如果找到 key
         //     var v = feeCache[key];                                                                // 取出 键名为 key 的变量值
@@ -85,8 +56,7 @@ function updateStatePrice(state) {        // 更新 价格
         //     feeCache[key] = {fee: fee, time: now};                                                // 在费率缓存 数据结构 feeCache 中储存 获取的 fee 和 当前的时间戳
         // }
 
-        fee = feeCache[key];
-        // Log(key + ": " + fee);
+        var fee = feeCache[key];
         // Log(key + ", Buy: " + fee.Buy + ", Sell: " + fee.Sell);
 
         // Buy-=fee Sell+=fee
@@ -94,46 +64,6 @@ function updateStatePrice(state) {        // 更新 价格
         state.details[i].realTicker = ticker;                                                                      // 实际的 行情价格
         state.details[i].fee = fee;                                                                                // 费率
     }
-}
-
-function getProfit(stateInit, stateNow, coinPrice) {                // 获取 当前计算盈亏的函数 
-    var netNow = stateNow.allBalance + (stateNow.allStocks * coinPrice);          // 计算当前账户的总资产市值
-    var netInit =  stateInit.allBalance + (stateInit.allStocks * coinPrice);      // 计算初始账户的总资产市值    
-    LogStatus(" 总资产：" + netNow + ", 币差：" + (stateNow.allStocks - stateInit.allStocks));
-    return adjustFloat(netNow - netInit);                                         // 当前的 减去 初始的  即是 盈亏，return 这个盈亏
-}
-
-function getExchangeAccounts() {
-    var accounts = [];
-    while (true) {
-        for (var i = 0; i < exchanges.length; i++) {
-            if (accounts[i] == null) {
-                // 创建异步操作
-                accounts[i] = exchanges[i].Go("GetAccount");
-            }
-        }
-        var failed = 0;
-        for (var i = 0; i < exchanges.length; i++) {
-            if (typeof(accounts[i].wait) != "undefined") {
-                // 等待结果
-                var ret = accounts[i].wait();
-                if (ret) {
-                    accounts[i] = ret;
-                    // Log(exchanges[i].GetName(), accounts[i]);
-                } else {
-                    // 重试
-                    accounts[i] = null;
-                    failed++;
-                }
-            }
-        }
-        if (failed == 0) {
-            break;
-        } else {
-            Sleep(100);
-        }
-    }
-    return accounts;
 }
 
 function getExchangeTickers() {
@@ -169,18 +99,48 @@ function getExchangeTickers() {
     return tickers;
 }
 
-function getExchangeDetails() {
+function getExchangesState() {                                      // 获取 交易所状态 函数
+    var allStocks = 0;                                              // 所有的币数
+    var allBalance = 0;                                             // 所有的钱数
+    var minStock = 0;                                               // 最小交易 币数
+    var details = [];                                               // details 储存详细内容 的数组。
+    var accounts = getExchangeAccounts();
+    for (var i = 0; i < exchanges.length; i++) {                    // 遍历 交易所对象数组
+        // var account = null;                                         // 每次 循环声明一个 account 变量。
+        // while (!(account = exchanges[i].GetAccount())) {            // 使用exchanges 数组内的 当前索引值的 交易所对象，调用其成员函数，获取当前交易所的账户信息。返回给 account 变量,!account为真则一直获取。
+        //     Sleep(Interval);                                        // 如果!account 为真，即account获取失败，则调用Sleep 函数 暂停 Interval 设置的 毫秒数 时间，重新循环，直到获取到有效的账户信息。 
+        // }
+        var account = accounts[i];
+        exchanges[i].SetPrecision(1, 5);                            // 设置价格小数位精度为2位, 品种下单量小数位精度为3位
+        allStocks += account.Stocks + account.FrozenStocks;         // 累计所有 交易所币数
+        allBalance += account.Balance + account.FrozenBalance;      // 累计所有 交易所钱数
+        // Log(exchanges[i].GetName() + ", minStock: " + exchanges[i].GetMinStock());
+        // minStock = Math.max(minStock, exchanges[i].GetMinStock());  // 设置最小交易量minStock  为 所有交易所中 最小交易量最大的值
+        details.push({exchange: exchanges[i], account: account});   // 把每个交易所对象 和 账户信息 组合成一个对象压入数组 details 
+    }
+    return {allStocks: adjustFloat(allStocks), allBalance: adjustFloat(allBalance), minStock: 0.005, details: details};   // 返回 所有交易所的 总币数，总钱数 ，所有最小交易量中的最大值， details数组
+}
+
+function getCopyState(state) {
+    var details = [];
+    for(var i in state.details) {
+        var account = {};
+        account.Stocks = state.details[i].account.Stocks;
+        account.FrozenStocks = state.details[i].account.FrozenStocks;
+        account.Balance = state.details[i].account.Balance;
+        account.FrozenBalance = state.details[i].account.FrozenBalance;
+        details.push({exchange: state.details[i].exchange, account: account});  
+    }
+    return {allStocks: state.allStocks, allBalance: state.allBalance, minStock: state.minStock, details: details};
+}
+
+function getExchangeAccounts() {
     var accounts = [];
-    var tickers = [];
     while (true) {
         for (var i = 0; i < exchanges.length; i++) {
             if (accounts[i] == null) {
                 // 创建异步操作
                 accounts[i] = exchanges[i].Go("GetAccount");
-            }
-            if (tickers[i] == null) {
-                // 创建异步操作
-                tickers[i] = exchanges[i].Go("GetTicker");
             }
         }
         var failed = 0;
@@ -197,18 +157,6 @@ function getExchangeDetails() {
                     failed++;
                 }
             }
-            if (typeof(tickers[i].wait) != "undefined") {
-                // 等待结果
-                var ret = tickers[i].wait();
-                if (ret) {
-                    tickers[i] = ret;
-                    // Log(exchanges[i].GetName(), accounts[i]);
-                } else {
-                    // 重试
-                    tickers[i] = null;
-                    failed++;
-                }
-            }
         }
         if (failed == 0) {
             break;
@@ -216,50 +164,7 @@ function getExchangeDetails() {
             Sleep(100);
         }
     }
-    return {accounts: accounts, tickers: tickers} ;
-}
-
-function getExchangesState_new() {
-    var allStocks = 0;                                              // 所有的币数
-    var allBalance = 0;                                             // 所有的钱数
-    var minStock = 0;                                               // 最小交易 币数
-    var details = [];                                               // details 储存详细内容 的数组。
-    var exchangeDetails = getExchangeDetails();
-    var accounts = exchangeDetails.accounts;
-    var tickers = exchangeDetails.tickers;
-    for (var i = 0; i < exchanges.length; i++) {                    // 遍历 交易所对象数组
-        // var account = null;                                         // 每次 循环声明一个 account 变量。
-        // while (!(account = exchanges[i].GetAccount())) {            // 使用exchanges 数组内的 当前索引值的 交易所对象，调用其成员函数，获取当前交易所的账户信息。返回给 account 变量,!account为真则一直获取。
-        //     Sleep(Interval);                                        // 如果!account 为真，即account获取失败，则调用Sleep 函数 暂停 Interval 设置的 毫秒数 时间，重新循环，直到获取到有效的账户信息。 
-        // }
-
-        exchanges[i].SetPrecision(2, 5);                            // 设置价格小数位精度为2位, 品种下单量小数位精度为3位
-        allStocks += accounts[i].Stocks + accounts[i].FrozenStocks;         // 累计所有 交易所币数
-        allBalance += accounts[i].Balance + accounts[i].FrozenBalance;      // 累计所有 交易所钱数
-        minStock = Math.max(minStock, exchanges[i].GetMinStock());  // 设置最小交易量minStock  为 所有交易所中 最小交易量最大的值
-        details.push({exchange: exchanges[i], account: accounts[i]});   // 把每个交易所对象 和 账户信息 组合成一个对象压入数组 details 
-    }
-    return {allStocks: adjustFloat(allStocks), allBalance: adjustFloat(allBalance), minStock: minStock, details: details, tickers: tickers};   // 返回 所有交易所的 总币数，总钱数 ，所有最小交易量中的最大值， details数组
-}
-
-function getExchangesState() {                                      // 获取 交易所状态 函数
-    var allStocks = 0;                                              // 所有的币数
-    var allBalance = 0;                                             // 所有的钱数
-    var minStock = 0;                                               // 最小交易 币数
-    var details = [];                                               // details 储存详细内容 的数组。
-    for (var i = 0; i < exchanges.length; i++) {                    // 遍历 交易所对象数组
-        var account = null;                                         // 每次 循环声明一个 account 变量。
-        while (!(account = exchanges[i].GetAccount())) {            // 使用exchanges 数组内的 当前索引值的 交易所对象，调用其成员函数，获取当前交易所的账户信息。返回给 account 变量,!account为真则一直获取。
-            Sleep(Interval);                                        // 如果!account 为真，即account获取失败，则调用Sleep 函数 暂停 Interval 设置的 毫秒数 时间，重新循环，直到获取到有效的账户信息。 
-        }
-        exchanges[i].SetPrecision(1, 5);                            // 设置价格小数位精度为2位, 品种下单量小数位精度为3位
-        allStocks += account.Stocks + account.FrozenStocks;         // 累计所有 交易所币数
-        allBalance += account.Balance + account.FrozenBalance;      // 累计所有 交易所钱数
-        // Log(exchanges[i].GetName() + ", minStock: " + exchanges[i].GetMinStock());
-        minStock = Math.max(minStock, exchanges[i].GetMinStock());  // 设置最小交易量minStock  为 所有交易所中 最小交易量最大的值
-        details.push({exchange: exchanges[i], account: account});   // 把每个交易所对象 和 账户信息 组合成一个对象压入数组 details 
-    }
-    return {allStocks: adjustFloat(allStocks), allBalance: adjustFloat(allBalance), minStock: 0.005, details: details};   // 返回 所有交易所的 总币数，总钱数 ，所有最小交易量中的最大值， details数组
+    return accounts;
 }
 
 function cancelAllOrders() {                                        // 取消所有订单函数
@@ -278,30 +183,17 @@ function cancelAllOrders() {                                        // 取消所
             for (var j = 0; j < orders.length; j++) {               // 遍历orders  数组， 根据挂出 订单ID，逐个调用 API 函数 CancelOrder 撤销挂单 
                 if(orders[j].Status == ORDER_STATE_PENDING) {
                     exchanges[i].CancelOrder(orders[j].Id, orders[j]);    
-                }                
+                }
             }
         }
     }
 }
 
-function cancelAllOrders_old() {                                        // 取消所有订单函数
-    for (var i = 0; i < exchanges.length; i++) {                    // 遍历交易所对象数组（就是在新建机器人时添加的交易所，对应的对象）
-        while (true) {                                              // 遍历中每次进入一个 while 循环
-            var orders = null;                                      // 声明一个 orders 变量，用来接收 API 函数 GetOrders  返回的 未完成的订单 数据。
-            while (!(orders = exchanges[i].GetOrders())) {          // 使用 while 循环 检测 API 函数 GetOrders 是否返回了有效的数据（即 如果 GetOrders 返回了null 会一直执行while 循环，并重新检测）
-                                                                    // exchanges[i] 就是当前循环的 交易所对象，我们通过调用API GetOrders （exchanges[i] 的成员函数） ，获取未完成的订单。 
-                Sleep(Interval);                                    // Sleep 函数根据 参数 Interval 的设定 ，让程序暂停 设定的 毫秒数（1000毫秒 = 1秒）。
-            }
-
-            if (orders.length == 0) {                               // 如果 获取到的未完成的订单数组 非null ， 即通过上边的while 循环， 但是 orders.length 等于 0（空数组，没有挂单了）。  
-                break;                                              // 执行 break 跳出 当前的 while 循环（即 没有要取消的订单）
-            }
-
-            for (var j = 0; j < orders.length; j++) {               // 遍历orders  数组， 根据挂出 订单ID，逐个调用 API 函数 CancelOrder 撤销挂单 
-                exchanges[i].CancelOrder(orders[j].Id, orders[j]);
-            }
-        }
-    }
+function getProfit(stateInit, stateNow, coinPrice) {                // 获取 当前计算盈亏的函数 
+    var netNow = stateNow.allBalance + (stateNow.allStocks * coinPrice);          // 计算当前账户的总资产市值
+    var netInit =  stateInit.allBalance + (stateInit.allStocks * coinPrice);      // 计算初始账户的总资产市值    
+    LogStatus(" 总资产：" + netNow + ", 币差：" + (stateNow.allStocks - stateInit.allStocks));
+    return adjustFloat(netNow - netInit);                                         // 当前的 减去 初始的  即是 盈亏，return 这个盈亏
 }
 
 function logStateDetails(state) {
@@ -334,8 +226,6 @@ function balanceAccounts() {          // 平衡交易所 账户 钱数 币数
     if (isBalance) {                  // 如果 isBalance 为真 ， 即 平衡状态，则无需平衡，立即返回
         return;
     }
-
-    Sleep(300);
 
     cancelAllOrders();                // 在平衡前 要先取消所有交易所的挂单
 
@@ -430,10 +320,10 @@ function balanceAccounts() {          // 平衡交易所 账户 钱数 币数
         var currentProfit = getProfit(initState, state, lastAvgPrice);                          // 计算当前收益
         LogProfit(currentProfit, "Spread: ", adjustFloat((currentProfit - lastProfit) / lastOpAmount), "Balance: ", adjustFloat(state.allBalance), "Stocks: ", adjustFloat(state.allStocks));
         Log("当前收益: " + currentProfit, "@");
-        Log("************************************");
         // 打印当前收益信息
         if (StopWhenLoss && currentProfit < 0 && Math.abs(currentProfit) > MaxLoss) {           // 超过最大亏损停止代码块
-            Log('交易亏损超过最大限度, 程序取消所有订单后退出.');
+            Log('交易亏损超过最大限度, 程序取消所有订单后退出.', "@");
+            // Log('交易亏损超过最大限度, 程序取消所有订单后退出.');
             cancelAllOrders();                                                                  // 取消所有 挂单
             if (SMSAPI.length > 10 && SMSAPI.indexOf('http') == 0) {                            // 短信通知 代码块
                 HttpQuery(SMSAPI);
@@ -493,13 +383,13 @@ function onTick() {                  // 主要循环
 
     // filter invalid price
     if (minPair.realTicker.Sell <= minPair.realTicker.Buy || maxPair.realTicker.Sell <= maxPair.realTicker.Buy) {   // 过滤 无效价格， 比如 卖一价 是不可能小于等于 买一价的。
-        // Log("不满足对冲条件：市场价格异常");
+        Log("不满足对冲条件：市场价格异常");
         return;
     }
 
     // what a fuck...
     if (maxPair.exchange.GetName() == minPair.exchange.GetName()) {                                   // 数据异常，同时 最低 最高都是一个交易所。
-        // Log("不满足对冲条件：最大最小为同一市场");
+        Log("不满足对冲条件：最大最小为同一市场");
         return;
     }
 
@@ -513,21 +403,16 @@ function onTick() {                  // 主要循环
     // Log('买进：', minPair.exchange.GetName() + '(可买进数量：' + minPair.realBuy + ' )' + '，卖出：', maxPair.exchange.GetName() + '(可卖出数量：' + maxPair.canSell + ' )');
     // Log("对冲数量：" + hedgePrice);
     // Log(minPair.exchange.GetName() + '：实际买进数量：' + (minPair.realTicker.Sell + hedgePrice) + ', ' + maxPair.exchange.GetName() + '实际卖出数量：' + (maxPair.realTicker.Buy - hedgePrice));    
-    if (minPair.exchange.Buy(minPair.realTicker.Sell + hedgePrice, amount * (1+(minPair.fee.Buy/100)), stripTicker(minPair.realTicker))) { // 先下 买单
-        maxPair.exchange.Sell(maxPair.realTicker.Buy - hedgePrice, amount, stripTicker(maxPair.realTicker));                               // 买单下之后 下卖单
-    }
 
-    // var buyID = minPair.exchange.Buy(minPair.realTicker.Sell + hedgePrice, amount * (1+(minPair.fee.Buy/100)), stripTicker(minPair.realTicker));
-    // var sellID;
-    // if(buyID) {
-    //     sellID = maxPair.exchange.Sell(maxPair.realTicker.Buy - hedgePrice, amount, stripTicker(maxPair.realTicker));                               // 买单下之后 下卖单
+    // Log("Start to trade");
+
+    // if (minPair.exchange.Buy(minPair.realTicker.Sell + hedgePrice, amount * (1+(minPair.fee.Buy/100)), stripTicker(minPair.realTicker))) { // 先下 买单
+    //     maxPair.exchange.Sell(maxPair.realTicker.Buy - hedgePrice, amount, stripTicker(maxPair.realTicker));                               // 买单下之后 下卖单
     // }
 
-    // var buyOrder = _C(minPair.exchange.GetOrder, buyID);
-    // var sellOrder = _C(maxPair.exchange.GetOrder, sellID);
-
-    // Log("Buy: " + buyID + "DealAmount: " + buyOrder.DealAmount + ", Price: " + buyOrder.Price + ", Status: " + buyOrder.Status);
-    // Log("Sell: " + sellID + "DealAmount: " + sellOrder.DealAmount + ", Price: " + sellOrder.Price + ", Status: " + sellOrder.Status);
+    if (maxPair.exchange.Sell(maxPair.realTicker.Buy - hedgePrice, amount, stripTicker(maxPair.realTicker))) { // 先下 买单
+        minPair.exchange.Buy(minPair.realTicker.Sell + hedgePrice, amount * (1+(minPair.fee.Buy/100)), stripTicker(minPair.realTicker));                               // 买单下之后 下卖单
+    }
 
     isBalance = false;                                                                                // 设置为 不平衡，下次带检查 平衡。
 }
@@ -559,10 +444,9 @@ function configFees() {
 }
 
 function main() {                                         // 策略的入口函数
-    // LogReset();
-    // LogProfitReset();
+    LogReset();
+    LogProfitReset();
     // SetErrorFilter("502:|503:|tcp|character|connection|unexpected|network|timeout|WSARecv|Connect|GetAddr|no such|reset|http|received|EOF|reused");
-
     if (exchanges.length < 2) {                           // 首先判断 exchanges 策略添加的交易所对象个数，  exchanges 是一个交易所对象数组，我们判断其长度 exchanges.length，如果小于2执行{}内代码
         throw "交易所数量最少得两个才能完成对冲";              // 抛出一个错误，程序停止。
     }
@@ -573,6 +457,9 @@ function main() {                                         // 策略的入口函�
     cancelAllOrders();                                    // 在最开始的时候 不能有任何挂单。所以 会检测所有挂单 ，并取消所有挂单。
 
     initState = getExchangesState();                      // 调用自定义的 getExchangesState 函数获取到 所有交易所的信息， 赋值给 initState 
+
+    state = getCopyState(initState);
+
     if (initState.allStocks == 0) {                       // 如果 所有交易所 币数总和为0  ，抛出错误。
         throw "所有交易所货币数量总和为空, 必须先在任一交易所建仓才可以完成对冲";
     }
