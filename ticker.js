@@ -42,10 +42,12 @@ function main() {
     state = getExchangesState();
 
  	while (true) {                                        // while 循环
-        onTick();                                         // 执行主要 逻辑函数 onTick 
+        // onTick();                                         // 执行主要 逻辑函数 onTick 
+        getExchangeTickers();
         Sleep(parseInt(TickInterval));
     }
 }
+
 
 function getExchangeDetails() {
     var accounts = [];
@@ -173,10 +175,51 @@ function adjustFloat(v) {                 // 处理数据的自定义函数 ，�
     return Math.floor(v*1000)/1000;       // 先乘1000 让小数位向左移动三位，向下取整 整数，舍去所有小数部分，再除以1000 ， 小数点向右移动三位，即保留三位小数。
 }
 
+function getExchangeTickers() {
+    var tickers = [];
+    var start = [];
+    var end = [];
+    while (true) {
+        for (var i = 0; i < exchanges.length; i++) {
+            if (tickers[i] == null) {
+                // 创建异步操作
+                start[i] = (new Date()).getTime();
+                tickers[i] = exchanges[i].Go("GetTicker");
+
+            }
+        }
+        var failed = 0;
+        for (var i = 0; i < exchanges.length; i++) {
+            if (typeof(tickers[i].wait) != "undefined") {
+                // 等待结果
+                var ret = tickers[i].wait();
+                Log(exchanges[i].GetName() +  ", 延迟: " + ((new Date()).getTime() - start[i]) + 'ms');
+                if (ret) {
+                    tickers[i] = ret;
+                    // Log(exchanges[i].GetName(), tickers[i]);
+                } else {
+                    // 重试
+                    tickers[i] = null;
+                    failed++;
+                }
+            }
+        }
+        if (failed == 0) {
+            break;
+        } else {
+            Sleep(100);
+        }
+    }
+    return tickers;
+}
+
 
 function test() { 
+    var start = (new Date()).getTime();
 	var routine = exchange.Go("GetDepth"); // 异步返回一个可以调用wait方法的对像routine 
-	var ret = routine.wait(1000); // 等待异步操作结束, 超时为1秒 
+	var ret = routine.wait(); // 等待异步操作结束, 超时为1秒 
+    var end = (new Date()).getTime();
+    Log("延迟: " + (end - start) + ' ms');
 	if (typeof(ret) !== 'undefined') { // 只要ret不是undefined就说明异步已经结束并返回了值 
 		Log("异步结束", ret); // 此时方法如果失败就返回null，成功就返回需要的值, 与同步返回的值是一样的 
 		// 对于一个已经结束了的异步调用, 不能重复wait了, 会造成策略异常退出 !!! 
