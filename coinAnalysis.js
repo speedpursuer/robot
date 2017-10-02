@@ -1,7 +1,7 @@
-// botvs@881211fe3a34f558ba5cff9593324b37
+// botvs@147f60f214b9380bcfe11acc084ca2b5 -
 
 var Interval = 700;
-var TickInterval = 700;
+var TickInterval = 1000;
 var AmountOnce = 0.05;
 var SlideRatio = 10;
 var feeCache = new Array();
@@ -28,20 +28,15 @@ var InitBalance = 1538;
 
 var balanceCache = {};
 
-function main() {
-	// var e = exchanges[1];
- //  	var depth = e.GetDepth();    // 获取市场深度
- //  	Log("depth:", depth);                   // 日志输出显示
- //  	Log(e.GetAccount());         // 输出 吃单前的 账户信息
- //  	var buyPrice = depth.Asks[0].Price;     // 设置吃卖单的价格，即卖一，
- //                                          // 有时为确保吃单成功，这样处理：var buyPrice = depth.Asks[0].Price + slidePrice;
- //  	var buyAmount = depth.Asks[0].Amount;   // 吃卖单的量
- //  	e.Buy(buyPrice, buyAmount);  // 执行买入操作， 吃掉卖一 这个单子
- //  	Log(e.GetAccount());         // 显示买入后的  账户信息，对比初始账户信息。可以对比出 买入操作的成交的数量。
+var avgPrices = {};
 
- 	// LogReset();
-    // LogProfitReset();
+function main() {
+
     configForCoinType();
+    configFees();
+
+    LogReset();
+    LogProfitReset();
 
     initState = getExchangesState(true);                      // 调用自定义的 getExchangesState 函数获取到 所有交易所的信息， 赋值给 initState 
     if (initState.allStocks == 0) {                       // 如果 所有交易所 币数总和为0  ，抛出错误。
@@ -65,22 +60,32 @@ function main() {
 }
 
 function configForCoinType() {
+
+	var unitPrice;
+
 	//BTC
-	// AmountOnce = 0.2;
-	// SlideRatio = 10;
-	// MaxDiff = 5;
-	// InitStock = 0.392 * 3;
-	// InitBalance = 1538 * 3;
+	AmountOnce = 0.02;
+	SlideRatio = 8;
+	MaxDiff = 15;
+    unitPrice = 480000;
 
 	//LTC
-	AmountOnce = 0.2;
-	SlideRatio = 2;
-	MaxDiff = 0.27;
-	SlidePrice = 0.01;
-	InitStock = 30;
-	InitBalance = 1538;
+	// AmountOnce = 0.2;
+	// SlideRatio = 3;
+	// MaxDiff = 0.27;
+	// unitPrice = 54.10;
 
 
+	//ETC
+	// AmountOnce = 4;
+	// SlideRatio = 3;
+	// MaxDiff = 0.09;
+	// unitPrice = 12.17;
+
+	var balancePerExchange = 145326;
+	SlidePrice = 0.1;
+	InitStock = balancePerExchange/unitPrice;
+	InitBalance = balancePerExchange;
 }
 
 function adjustFloat(v) {                 // 处理数据的自定义函数 ，可以把参数 v 处理 返回 保留3位小数（floor向下取整）
@@ -93,12 +98,6 @@ function isPriceNormal(v) {               // 判断是否价格正常， StopPri
 }
 
 function setAccount(exchangeName, account, reset) {
-
-	// var initStock = 1.5;
-	// var initBalance = 5800;
-
-	// var initStock = 0.392;
-	// var initBalance = 1538;
 
 	if(reset) {
 		account.Stocks = InitStock;
@@ -117,86 +116,36 @@ function setAccount(exchangeName, account, reset) {
 	account.FrozenBalance = 0;
 }
 
-function configAccount() {
-    balanceCache['Bitfinex'] = {
-        Stocks: 0.1,
-        Sell: 0.1
-    };
+// function configAccount() {
+//     balanceCache['Bitfinex'] = {
+//         Stocks: 0.1,
+//         Balance: 0.1
+//     };
 
-    balanceCache['Bittrex'] = {
-        Stocks: 0.25,
-        Sell: 0.25
-    };
+//     balanceCache['Bittrex'] = {
+//         Stocks: 0.25,
+//         Balance: 0.25
+//     };
 
-    balanceCache['Kraken'] = {
-        Stocks: 0.16,
-        Sell: 0.16
-    };
+//     balanceCache['Kraken'] = {
+//         Stocks: 0.16,
+//         Balance: 0.16
+//     };
 
-    balanceCache['Poloniex'] = {
-        Stocks: 0.15,
-        Sell: 0.15
-    };
+//     balanceCache['Poloniex'] = {
+//         Stocks: 0.15,
+//         Balance: 0.15
+//     };
 
-    balanceCache['Bitstamp'] = {
-        Stocks: 0.25,
-        Sell: 0.25
-    };
+//     balanceCache['Bitstamp'] = {
+//         Stocks: 0.25,
+//         Balance: 0.25
+//     };
 
-    // for(var i in feeCache) {
-    //     Log(i + ", Buy: " + feeCache[i].fee.Buy + ", Sell: " + feeCache[i].fee.Sell);   
-    // }
-}
-
-function getExchangeTicker() {
-    var accounts = [];
-    var tickers = [];
-    while (true) {
-        for (var i = 0; i < exchanges.length; i++) {
-            // if (accounts[i] == null) {
-            //     // 创建异步操作
-            //     accounts[i] = exchanges[i].Go("GetAccount");
-            // }
-            if (tickers[i] == null) {
-                // 创建异步操作
-                tickers[i] = exchanges[i].Go("GetTicker");
-            }
-        }
-        var failed = 0;
-        for (var i = 0; i < exchanges.length; i++) {
-            // if (typeof(accounts[i].wait) != "undefined") {
-            //     // 等待结果
-            //     var ret = accounts[i].wait();
-            //     if (ret) {
-            //         accounts[i] = ret;
-            //         // Log(exchanges[i].GetName(), accounts[i]);
-            //     } else {
-            //         // 重试
-            //         accounts[i] = null;
-            //         failed++;
-            //     }
-            // }
-            if (typeof(tickers[i].wait) != "undefined") {
-                // 等待结果
-                var ret = tickers[i].wait();
-                if (ret) {
-                    tickers[i] = ret;
-                    // Log(exchanges[i].GetName(), accounts[i]);
-                } else {
-                    // 重试
-                    tickers[i] = null;
-                    failed++;
-                }
-            }
-        }
-        if (failed == 0) {
-            break;
-        } else {
-            Sleep(Interval);
-        }
-    }
-    return {accounts: accounts, tickers: tickers} ;
-}
+//     // for(var i in feeCache) {
+//     //     Log(i + ", Buy: " + feeCache[i].fee.Buy + ", Sell: " + feeCache[i].fee.Sell);   
+//     // }
+// }
 
 function getExchangesState(isInit) {                                      // 获取 交易所状态 函数
     var allStocks = 0;                                              // 所有的币数
@@ -229,47 +178,12 @@ function updateStatePrice(state) {        // 更新 价格
         // var ticker = null;                              // 声明一个 变量 ticker
         // var key = state.details[i].exchange.GetName() + state.details[i].exchange.GetCurrency();  // 获取当前索引 i  的 元素，使用其中引用的交易所对象 exchange ,调用GetName、GetCurrency函数
         var key = state.details[i].exchange.GetName();
-                                                                                                  // 交易所名称 + 币种 字符串 赋值给 key ，作为键
-        // var fee = null;                                                                           // 声明一个变量 Fee
-        // var retryTimes = 0;
-        // while (!(ticker = state.details[i].exchange.GetTicker()) && retryTimes < maxRetry) {                               // 用当前 交易所对象 调用 GetTicker 函数获取 行情，获取失败，执行循环
-        // 	retryTimes++;
-        //     Sleep(Interval);                                                                      // 执行 Sleep 函数，暂停 Interval 设置的毫秒数            
-        // }
-        // //如果获取不到ticker数据，已上次的代替，并标记后继续下一个exchange的设置
-        // if(retryTimes >= maxRetry && lastState != null) {
-        // 	Log(state.details[i].exchange.GetName() + ": GetTicker重试失败，不参与此次对冲", "@");
-        // 	state.details[i].ticker = lastState.details[i].ticker;
-        // 	state.details[i].realTicker = lastState.details[i].realTicker;
-        // 	state.details[i].fee = lastState.details[i].fee;
-        // 	state.details[i].skip = true;
-        // 	continue;
-        // }
 
         var ticker = state.tickers[i];
 
-        // if (key in feeCache) {                                                                    // 在feeCache 中查询，如果找到 key
-        //     var v = feeCache[key];                                                                // 取出 键名为 key 的变量值
-        //     if ((now - v.time) > feeTimeout) {                                                    // 根据行情的记录时间 和 now 的差值，如果大于 手续费更新周期
-        //         delete feeCache[key];                                                             // 删除 过期的 费率 数据
-        //     } else {
-        //         fee = v.fee;                                                                      // 如果没大于更新周期， 取出v.fee 赋值给 fee
-        //     }
-        // }
-        // if (!fee) {                                                                               // 如果没有找到 fee 还是初始的null ， 则触发if 
-        //     while (!(fee = state.details[i].exchange.GetFee())) {                                 // 调用 当前交易所对象 GetFee 函数 获取 费率
-        //         Sleep(Interval);
-        //     }
-        //     fee = {
-        //     	"Sell": 0.15,
-        //     	"Buy": 0.15
-        //     };
-        //     feeCache[key] = {fee: fee, time: now};                                                // 在费率缓存 数据结构 feeCache 中储存 获取的 fee 和 当前的时间戳
-        // }
+        var fee = feeCache[key]? feeCache[key]: {Buy: 0, Sell: 0};
 
-        var fee = feeCache[key]? feeCache[key]: {Buy: 0.25, Sell: 0.25};
-
-        Log(key + ', fee.buy: ' + fee.Buy);
+        // Log(key + ', fee.buy: ' + fee.Buy);
 
         //汇率转化
         // ticker.Buy = adjustFloat(ticker.Buy/state.details[i].exchange.GetRate());
@@ -316,13 +230,106 @@ function configFees() {
     // }
 }
 
-function getProfit(stateInit, stateNow, coinPrice) {                // 获取 当前计算盈亏的函数 
-    var netNow = stateNow.allBalance + (stateNow.allStocks * coinPrice);          // 计算当前账户的总资产市值
-    var netInit =  stateInit.allBalance + (stateInit.allStocks * coinPrice);      // 计算初始账户的总资产市值    
-    // Log("stateNow.allBalance :" + stateNow.allBalance + ", stateInit.allBalance: " + stateInit.allBalance);
-    LogStatus(" 总资产：" + netNow + ", 币差：" + (stateNow.allStocks - stateInit.allStocks) + "\n" + transLog);
-    // LogStatus(" 盈利: " + adjustFloat(netNow - netInit), "@");
-    return adjustFloat(netNow - netInit);                                         // 当前的 减去 初始的  即是 盈亏，return 这个盈亏
+function onTick() {                  // 主要循环
+    if (!isBalance) {                // 判断 全局变量 isBalance 是否为 false  (代表不平衡)， !isBalance 为 真，执行 if 语句内代码。
+        balanceAccounts();           // 不平衡 时执行 平衡账户函数 balanceAccounts()
+        return;                      // 执行完返回。继续下次循环执行 onTick
+    }
+
+    var state = getExchangesState(false); // 获取 所有交易所的状态
+    
+    // We also need details of price
+    updateStatePrice(state);         // 更新 价格， 计算排除手续费影响的对冲价格值
+
+    var details = state.details;     // 取出 state 中的 details 值
+    var maxPair = null;              // 最大   组合
+    var minPair = null;              // 最小   组合
+    for (var i = 0; i < details.length; i++) {      //  遍历 details 这个数组    
+
+    	//忽略没有得到数据的exchange
+    	// if(details[i].skip) {
+    	// 	continue;
+    	// }
+
+        var sellOrderPrice = details[i].account.Stocks * (details[i].realTicker.Buy - SlidePrice);    // 计算 当前索引 交易所 账户币数 卖出的总额（卖出价为对手买一减去滑价）
+        if (((!maxPair) || (details[i].ticker.Buy > maxPair.ticker.Buy)) && (details[i].account.Stocks >= state.minStock) &&
+            (sellOrderPrice > details[i].exchange.GetMinPrice())) { // 首先判断maxPair 是不是 null ，如果不是null 就判断 排除手续费因素后的价格 大于 maxPair中行情数据的买一价
+                                                                    // 剩下的条件 是 要满足最小可交易量，并且要满足最小交易金额，满足条件执行以下。
+            details[i].canSell = details[i].account.Stocks;         // 给当前索引的 details 数组的元素 增加一个属性 canSell 把 当前索引交易所的账户 币数 赋值给它
+            maxPair = details[i];                                   // 把当前的 details 数组元素 引用给 maxPair 用于 for 循环下次对比，对比出最大的价格的。
+        }
+
+        // if (((!maxPair) || (details[i].ticker.Buy > maxPair.ticker.Buy))) { // 首先判断maxPair 是不是 null ，如果不是null 就判断 排除手续费因素后的价格 大于 maxPair中行情数据的买一价
+        //                                                             // 剩下的条件 是 要满足最小可交易量，并且要满足最小交易金额，满足条件执行以下。
+        //     details[i].canSell = details[i].account.Stocks;         // 给当前索引的 details 数组的元素 增加一个属性 canSell 把 当前索引交易所的账户 币数 赋值给它
+        //     maxPair = details[i];                                   // 把当前的 details 数组元素 引用给 maxPair 用于 for 循环下次对比，对比出最大的价格的。
+        // }
+
+        var canBuy = adjustFloat(details[i].account.Balance / (details[i].realTicker.Sell + SlidePrice));   // 计算 当前索引的 交易所的账户资金 可买入的币数
+        var buyOrderPrice = canBuy * (details[i].realTicker.Sell + SlidePrice);                             // 计算 下单金额
+        if (((!minPair) || (details[i].ticker.Sell < minPair.ticker.Sell)) && (canBuy >= state.minStock) && // 和卖出 部分寻找 最大价格maxPair一样，这里寻找最小价格
+            (buyOrderPrice > details[i].exchange.GetMinPrice())) {
+            details[i].canBuy = canBuy;                             // 增加 canBuy 属性记录   canBuy
+            // how much coins we real got with fee                  // 以下要计算 买入时 收取手续费后 （买入收取的手续费是扣币）， 实际要购买的币数。
+            details[i].realBuy = adjustFloat(details[i].account.Balance / (details[i].ticker.Sell + SlidePrice));   // 使用 排除手续费影响的价格 计算真实要买入的量
+            minPair = details[i];                                   // 符合条件的 记录为最小价格组合 minPair
+        }
+
+        // if (((!minPair) || (details[i].ticker.Sell < minPair.ticker.Sell))) {
+        //     details[i].canBuy = canBuy;                             // 增加 canBuy 属性记录   canBuy
+        //     // how much coins we real got with fee                  // 以下要计算 买入时 收取手续费后 （买入收取的手续费是扣币）， 实际要购买的币数。
+        //     details[i].realBuy = adjustFloat(details[i].account.Balance / (details[i].ticker.Sell + SlidePrice));   // 使用 排除手续费影响的价格 计算真实要买入的量
+        //     minPair = details[i];                                   // 符合条件的 记录为最小价格组合 minPair
+        // }
+        // Log(details[i].exchange.GetName() + ", Buy: " + details[i].ticker.Buy + ", Sell: " + details[i].ticker.Sell + ", Stocks: " + details[i].account.Stocks + ", sellOrderPrice: " + sellOrderPrice + ", buyOrderPrice: " + buyOrderPrice + ", canBuy: " + canBuy);
+        // Log(details[i].exchange.GetName() + ", " + details[i].exchange.GetRate() +  ", Buy: " + details[i].ticker.Buy + ", Sell: " + details[i].ticker.Sell + ", Stocks: " + details[i].account.Stocks + ", Balance: " + details[i].account.Balance);
+        recordAvgPrices();
+    }
+
+    // Log("maxPair: " + maxPair.exchange.GetName() + ", minPair: " + minPair.exchange.GetName());
+    // Log("maxPair.ticker.Buy: " + maxPair.ticker.Buy + ", maxPair.ticker.Sell: " + maxPair.ticker.Sell);
+    // Log("minPair.ticker.Buy: " + minPair.ticker.Buy + ", minPair.ticker.Sell: " + minPair.ticker.Sell);
+
+	// if(maxPair) Log("maxPair: " + maxPair.exchange.GetName() + ", Buy: " + maxPair.ticker.Buy + ", Sell: " + maxPair.ticker.Sell);
+	// if(minPair) Log("minPair: " + minPair.exchange.GetName() + ", Buy: " + minPair.ticker.Buy + ", Sell: " + minPair.ticker.Sell);
+
+    if ((!maxPair) || (!minPair) || ((maxPair.ticker.Buy - minPair.ticker.Sell) < MaxDiff) ||         // 根据以上 对比出的所有交易所中最小、最大价格，检测是否不符合对冲条件
+    !isPriceNormal(maxPair.ticker.Buy) || !isPriceNormal(minPair.ticker.Sell)) {
+        // Log("不满足对冲条件：对冲价格偏差小于MaxDiff (" + MaxDiff + "), 差值: " + (maxPair.ticker.Buy - minPair.ticker.Sell));
+        return;                                                                                       // 如果不符合 则返回
+    }
+
+    // filter invalid price
+    if (minPair.realTicker.Sell <= minPair.realTicker.Buy || maxPair.realTicker.Sell <= maxPair.realTicker.Buy) {   // 过滤 无效价格， 比如 卖一价 是不可能小于等于 买一价的。
+        // Log("不满足对冲条件：市场价格异常");
+        return;
+    }
+
+    // what a fuck...
+    if (maxPair.exchange.GetName() == minPair.exchange.GetName()) {                                   // 数据异常，同时 最低 最高都是一个交易所。
+        // Log("不满足对冲条件：最大最小为同一市场");
+        return;
+    }
+
+    lastAvgPrice = adjustFloat((minPair.realTicker.Buy + maxPair.realTicker.Buy) / 2);                // 记录下 最高价  最低价 的平均值
+    lastSpread = adjustFloat((maxPair.realTicker.Sell - minPair.realTicker.Buy) / 2);                 // 记录  买卖 差价
+
+    // compute amount                                                                                 // 计算下单量
+    var amount = Math.min(AmountOnce, maxPair.canSell, minPair.realBuy);                          // 根据这几个 量取最小值，用作下单量
+    // Log("maxPair.canSell: " + maxPair.canSell + ", minPair.realBuy: " + minPair.realBuy);
+    lastOpAmount = amount;                                                                            // 记录 下单量到 全局变量
+    var hedgePrice = adjustFloat((maxPair.realTicker.Buy - minPair.realTicker.Sell) / Math.max(SlideRatio, 2))  // 根据 滑价系数 ，计算对冲 滑价  hedgePrice
+    // Log('买进：', minPair.exchange.GetName() + '(可买进数量：' + minPair.realBuy + ' )' + '，卖出：', maxPair.exchange.GetName() + '(可卖出数量：' + maxPair.canSell + ' )');
+    // Log("对冲数量：" + hedgePrice);
+    // Log(minPair.exchange.GetName() + '：实际买进数量：' + (minPair.realTicker.Sell + hedgePrice) + ', ' + maxPair.exchange.GetName() + '实际卖出数量：' + (maxPair.realTicker.Buy - hedgePrice));    
+    
+    // if (minPair.exchange.Buy(minPair.realTicker.Sell + hedgePrice, amount * (1+(minPair.fee.Buy/100)), stripTicker(minPair.realTicker))) { // 先下 买单
+    //     maxPair.exchange.Sell(maxPair.realTicker.Buy - hedgePrice, amount, stripTicker(maxPair.realTicker));                               // 买单下之后 下卖单
+    // }
+
+    doTransaction(maxPair, minPair, amount, hedgePrice);
+
+    isBalance = false;                                                                                // 设置为 不平衡，下次带检查 平衡。
 }
 
 function balanceAccounts() {          // 平衡交易所 账户 钱数 币数
@@ -421,107 +428,6 @@ function balanceAccounts() {          // 平衡交易所 账户 钱数 币数
     }
 }
 
-function onTick() {                  // 主要循环
-    if (!isBalance) {                // 判断 全局变量 isBalance 是否为 false  (代表不平衡)， !isBalance 为 真，执行 if 语句内代码。
-        balanceAccounts();           // 不平衡 时执行 平衡账户函数 balanceAccounts()
-        return;                      // 执行完返回。继续下次循环执行 onTick
-    }
-
-    var state = getExchangesState(false); // 获取 所有交易所的状态
-    
-    // We also need details of price
-    updateStatePrice(state);         // 更新 价格， 计算排除手续费影响的对冲价格值
-
-    var details = state.details;     // 取出 state 中的 details 值
-    var maxPair = null;              // 最大   组合
-    var minPair = null;              // 最小   组合
-    for (var i = 0; i < details.length; i++) {      //  遍历 details 这个数组    
-
-    	//忽略没有得到数据的exchange
-    	// if(details[i].skip) {
-    	// 	continue;
-    	// }
-
-        var sellOrderPrice = details[i].account.Stocks * (details[i].realTicker.Buy - SlidePrice);    // 计算 当前索引 交易所 账户币数 卖出的总额（卖出价为对手买一减去滑价）
-        if (((!maxPair) || (details[i].ticker.Buy > maxPair.ticker.Buy)) && (details[i].account.Stocks >= state.minStock) &&
-            (sellOrderPrice > details[i].exchange.GetMinPrice())) { // 首先判断maxPair 是不是 null ，如果不是null 就判断 排除手续费因素后的价格 大于 maxPair中行情数据的买一价
-                                                                    // 剩下的条件 是 要满足最小可交易量，并且要满足最小交易金额，满足条件执行以下。
-            details[i].canSell = details[i].account.Stocks;         // 给当前索引的 details 数组的元素 增加一个属性 canSell 把 当前索引交易所的账户 币数 赋值给它
-            maxPair = details[i];                                   // 把当前的 details 数组元素 引用给 maxPair 用于 for 循环下次对比，对比出最大的价格的。
-        }
-
-        // if (((!maxPair) || (details[i].ticker.Buy > maxPair.ticker.Buy))) { // 首先判断maxPair 是不是 null ，如果不是null 就判断 排除手续费因素后的价格 大于 maxPair中行情数据的买一价
-        //                                                             // 剩下的条件 是 要满足最小可交易量，并且要满足最小交易金额，满足条件执行以下。
-        //     details[i].canSell = details[i].account.Stocks;         // 给当前索引的 details 数组的元素 增加一个属性 canSell 把 当前索引交易所的账户 币数 赋值给它
-        //     maxPair = details[i];                                   // 把当前的 details 数组元素 引用给 maxPair 用于 for 循环下次对比，对比出最大的价格的。
-        // }
-
-        var canBuy = adjustFloat(details[i].account.Balance / (details[i].realTicker.Sell + SlidePrice));   // 计算 当前索引的 交易所的账户资金 可买入的币数
-        var buyOrderPrice = canBuy * (details[i].realTicker.Sell + SlidePrice);                             // 计算 下单金额
-        if (((!minPair) || (details[i].ticker.Sell < minPair.ticker.Sell)) && (canBuy >= state.minStock) && // 和卖出 部分寻找 最大价格maxPair一样，这里寻找最小价格
-            (buyOrderPrice > details[i].exchange.GetMinPrice())) {
-            details[i].canBuy = canBuy;                             // 增加 canBuy 属性记录   canBuy
-            // how much coins we real got with fee                  // 以下要计算 买入时 收取手续费后 （买入收取的手续费是扣币）， 实际要购买的币数。
-            details[i].realBuy = adjustFloat(details[i].account.Balance / (details[i].ticker.Sell + SlidePrice));   // 使用 排除手续费影响的价格 计算真实要买入的量
-            minPair = details[i];                                   // 符合条件的 记录为最小价格组合 minPair
-        }
-
-        // if (((!minPair) || (details[i].ticker.Sell < minPair.ticker.Sell))) {
-        //     details[i].canBuy = canBuy;                             // 增加 canBuy 属性记录   canBuy
-        //     // how much coins we real got with fee                  // 以下要计算 买入时 收取手续费后 （买入收取的手续费是扣币）， 实际要购买的币数。
-        //     details[i].realBuy = adjustFloat(details[i].account.Balance / (details[i].ticker.Sell + SlidePrice));   // 使用 排除手续费影响的价格 计算真实要买入的量
-        //     minPair = details[i];                                   // 符合条件的 记录为最小价格组合 minPair
-        // }
-        // Log(details[i].exchange.GetName() + ", Buy: " + details[i].ticker.Buy + ", Sell: " + details[i].ticker.Sell + ", Stocks: " + details[i].account.Stocks + ", sellOrderPrice: " + sellOrderPrice + ", buyOrderPrice: " + buyOrderPrice + ", canBuy: " + canBuy);
-        Log(details[i].exchange.GetName() + ", " + details[i].exchange.GetRate() +  ", Buy: " + details[i].ticker.Buy + ", Sell: " + details[i].ticker.Sell + ", Stocks: " + details[i].account.Stocks + ", Balance: " + details[i].account.Balance);
-    }
-
-    // Log("maxPair: " + maxPair.exchange.GetName() + ", minPair: " + minPair.exchange.GetName());
-    // Log("maxPair.ticker.Buy: " + maxPair.ticker.Buy + ", maxPair.ticker.Sell: " + maxPair.ticker.Sell);
-    // Log("minPair.ticker.Buy: " + minPair.ticker.Buy + ", minPair.ticker.Sell: " + minPair.ticker.Sell);
-
-	// if(maxPair) Log("maxPair: " + maxPair.exchange.GetName() + ", Buy: " + maxPair.ticker.Buy + ", Sell: " + maxPair.ticker.Sell);
-	// if(minPair) Log("minPair: " + minPair.exchange.GetName() + ", Buy: " + minPair.ticker.Buy + ", Sell: " + minPair.ticker.Sell);
-
-    if ((!maxPair) || (!minPair) || ((maxPair.ticker.Buy - minPair.ticker.Sell) < MaxDiff) ||         // 根据以上 对比出的所有交易所中最小、最大价格，检测是否不符合对冲条件
-    !isPriceNormal(maxPair.ticker.Buy) || !isPriceNormal(minPair.ticker.Sell)) {
-        // Log("不满足对冲条件：对冲价格偏差小于MaxDiff (" + MaxDiff + "), 差值: " + (maxPair.ticker.Buy - minPair.ticker.Sell));
-        return;                                                                                       // 如果不符合 则返回
-    }
-
-    // filter invalid price
-    if (minPair.realTicker.Sell <= minPair.realTicker.Buy || maxPair.realTicker.Sell <= maxPair.realTicker.Buy) {   // 过滤 无效价格， 比如 卖一价 是不可能小于等于 买一价的。
-        // Log("不满足对冲条件：市场价格异常");
-        return;
-    }
-
-    // what a fuck...
-    if (maxPair.exchange.GetName() == minPair.exchange.GetName()) {                                   // 数据异常，同时 最低 最高都是一个交易所。
-        // Log("不满足对冲条件：最大最小为同一市场");
-        return;
-    }
-
-    lastAvgPrice = adjustFloat((minPair.realTicker.Buy + maxPair.realTicker.Buy) / 2);                // 记录下 最高价  最低价 的平均值
-    lastSpread = adjustFloat((maxPair.realTicker.Sell - minPair.realTicker.Buy) / 2);                 // 记录  买卖 差价
-
-    // compute amount                                                                                 // 计算下单量
-    var amount = Math.min(AmountOnce, maxPair.canSell, minPair.realBuy);                          // 根据这几个 量取最小值，用作下单量
-    // Log("maxPair.canSell: " + maxPair.canSell + ", minPair.realBuy: " + minPair.realBuy);
-    lastOpAmount = amount;                                                                            // 记录 下单量到 全局变量
-    var hedgePrice = adjustFloat((maxPair.realTicker.Buy - minPair.realTicker.Sell) / Math.max(SlideRatio, 2))  // 根据 滑价系数 ，计算对冲 滑价  hedgePrice
-    // Log('买进：', minPair.exchange.GetName() + '(可买进数量：' + minPair.realBuy + ' )' + '，卖出：', maxPair.exchange.GetName() + '(可卖出数量：' + maxPair.canSell + ' )');
-    // Log("对冲数量：" + hedgePrice);
-    // Log(minPair.exchange.GetName() + '：实际买进数量：' + (minPair.realTicker.Sell + hedgePrice) + ', ' + maxPair.exchange.GetName() + '实际卖出数量：' + (maxPair.realTicker.Buy - hedgePrice));    
-    
-    // if (minPair.exchange.Buy(minPair.realTicker.Sell + hedgePrice, amount * (1+(minPair.fee.Buy/100)), stripTicker(minPair.realTicker))) { // 先下 买单
-    //     maxPair.exchange.Sell(maxPair.realTicker.Buy - hedgePrice, amount, stripTicker(maxPair.realTicker));                               // 买单下之后 下卖单
-    // }
-
-    doTransaction(maxPair, minPair, amount, hedgePrice);
-
-    isBalance = false;                                                                                // 设置为 不平衡，下次带检查 平衡。
-}
-
 function doBuy(minPair, price, amount) {
 	// Log("doBuy");
 	// Log("accounts: " + accounts);
@@ -580,12 +486,14 @@ function doTransaction(maxPair, minPair, amount, hedgePrice) {
     }
 
     var result = "";
+    var total = 0;
 
     for(var k in transactions) {
     	result = result + k + ": " + transactions[k] + "\n";
+    	total += transactions[k];
     }
 
-    transLog = result;
+    transLog = result + "\n" + "总计搬砖次数: " + total;
 
     // LogStatus(result);
 
@@ -607,22 +515,65 @@ function doTransaction(maxPair, minPair, amount, hedgePrice) {
 	Log("******************************************");
 }
 
-function stripTicker(t) {                           // 根据参数 t ， 格式化 输出关于t的数据。
-    return 'Buy: ' + adjustFloat(t.Buy) + ' Sell: ' + adjustFloat(t.Sell);
+function getProfit(stateInit, stateNow, coinPrice) {                // 获取 当前计算盈亏的函数 
+    var netNow = stateNow.allBalance + (stateNow.allStocks * coinPrice);          // 计算当前账户的总资产市值
+    var netInit =  stateInit.allBalance + (stateInit.allStocks * coinPrice);      // 计算初始账户的总资产市值    
+    // Log("stateNow.allBalance :" + stateNow.allBalance + ", stateInit.allBalance: " + stateInit.allBalance);
+    LogStatus(" 盈利：" + adjustFloat(netNow - netInit) + "\n" + transLog);
+    // LogStatus(" 盈利: " + adjustFloat(netNow - netInit), "@");
+    return adjustFloat(netNow - netInit);                                         // 当前的 减去 初始的  即是 盈亏，return 这个盈亏
 }
 
-function onTick1() {
-
-	// var tickers = [];
-
-	for (var i = 0; i < exchanges.length; i++) {                    // 遍历 交易所对象数组
-
-		var ticker = null;                              // 声明一个 变量 ticker
-
-		while (!(ticker = exchanges[i].GetTicker())) {                               // 用当前 交易所对象 调用 GetTicker 函数获取 行情，获取失败，执行循环
-	        Sleep(Interval);                                                                      // 执行 Sleep 函数，暂停 Interval 设置的毫秒数
-	    }
-
-        Log(exchanges[i].GetName() + ", Buy: " + ticker.Buy + ", Sell: " + ticker.Sell);
+function getExchangeTicker() {
+    var accounts = [];
+    var tickers = [];
+    while (true) {
+        for (var i = 0; i < exchanges.length; i++) {
+            // if (accounts[i] == null) {
+            //     // 创建异步操作
+            //     accounts[i] = exchanges[i].Go("GetAccount");
+            // }
+            if (tickers[i] == null) {
+                // 创建异步操作
+                tickers[i] = exchanges[i].Go("GetTicker");
+            }
+        }
+        var failed = 0;
+        for (var i = 0; i < exchanges.length; i++) {
+            // if (typeof(accounts[i].wait) != "undefined") {
+            //     // 等待结果
+            //     var ret = accounts[i].wait();
+            //     if (ret) {
+            //         accounts[i] = ret;
+            //         // Log(exchanges[i].GetName(), accounts[i]);
+            //     } else {
+            //         // 重试
+            //         accounts[i] = null;
+            //         failed++;
+            //     }
+            // }
+            if (typeof(tickers[i].wait) != "undefined") {
+                // 等待结果
+                var ret = tickers[i].wait();
+                if (ret) {
+                    tickers[i] = ret;
+                    // Log(exchanges[i].GetName(), accounts[i]);
+                } else {
+                    // 重试
+                    tickers[i] = null;
+                    failed++;
+                }
+            }
+        }
+        if (failed == 0) {
+            break;
+        } else {
+            Sleep(Interval);
+        }
     }
+    return {accounts: accounts, tickers: tickers} ;
+}
+
+function stripTicker(t) {                           // 根据参数 t ， 格式化 输出关于t的数据。
+    return 'Buy: ' + adjustFloat(t.Buy) + ' Sell: ' + adjustFloat(t.Sell);
 }

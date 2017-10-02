@@ -1,4 +1,4 @@
-// botvs@b73a4e940c1c25c49b71b1deb4d1caa7 (local)
+// botvs@b73a4e940c1c25c49b71b1deb4d1caa7
 
 var initState;
 var state;
@@ -175,13 +175,13 @@ function onTick() {                  // 主要循环
             minPair = details[i];                                   // 符合条件的 记录为最小价格组合 minPair
         }
         // Log(details[i].exchange.GetName() + ", Buy: " + details[i].ticker.Buy + ", Sell: " + details[i].ticker.Sell + ", Stocks: " + details[i].account.Stocks + ", sellOrderPrice: " + sellOrderPrice + ", buyOrderPrice: " + buyOrderPrice + ", canBuy: " + canBuy);
-        // Log(details[i].exchange.GetName() + ", Buy: " + details[i].ticker.Buy + ", Sell: " + details[i].ticker.Sell + ", Stocks: " + details[i].account.Stocks + ", Balance: " + details[i].account.Balance);
+        Log(details[i].exchange.GetName() + ", Buy: " + details[i].ticker.Buy + ", Sell: " + details[i].ticker.Sell + ", Stocks: " + details[i].account.Stocks + ", Balance: " + details[i].account.Balance);
     }
 
     // Log("maxPair: " + maxPair.exchange.GetName() + ", minPair: " + minPair.exchange.GetName());
     // Log("maxPair.ticker.Buy: " + maxPair.ticker.Buy + ", maxPair.ticker.Sell: " + maxPair.ticker.Sell);
     // Log("minPair.ticker.Buy: " + minPair.ticker.Buy + ", minPair.ticker.Sell: " + minPair.ticker.Sell);
-
+    return;
     
     if ((!maxPair) || (!minPair) || ((maxPair.ticker.Buy - minPair.ticker.Sell) < MaxDiff) ||         // 根据以上 对比出的所有交易所中最小、最大价格，检测是否不符合对冲条件
     !isPriceNormal(maxPair.ticker.Buy) || !isPriceNormal(minPair.ticker.Sell)) {
